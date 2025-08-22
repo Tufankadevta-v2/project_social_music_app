@@ -59,19 +59,25 @@ def create_sample_users():
             }
         )
         
-        if created:
-            # Create user profile
-            UserProfile.objects.get_or_create(
-                user=user,
-                defaults={
-                    'display_name': data['display_name'],
-                    'bio': data['bio'],
-                    'total_points': 0
-                }
-            )
-            
-            # Privacy settings are created automatically via signals
-            print(f"Created user: {data['display_name']} ({data['phone_number']})")
+        # Ensure password and phone verification for demo logins
+        if created or not user.has_usable_password():
+            user.set_password('defaultpass')
+        user.is_phone_verified = True
+        user.save()
+        
+        # Ensure profile exists and is populated
+        profile, _ = UserProfile.objects.get_or_create(
+            user=user,
+            defaults={
+                'display_name': data['display_name'],
+                'bio': data['bio'],
+                'total_points': 0
+            }
+        )
+        if profile.display_name != data['display_name'] or profile.bio != data['bio']:
+            profile.display_name = data['display_name']
+            profile.bio = data['bio']
+            profile.save()
         
         users.append(user)
     
