@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}TaskSocial{% endblock %}
+
+{% block content %}
+<!-- This container is for the entire authenticated app view -->
+<div id="app-container" class="hidden">
+    <!-- Main Navigation (Sidebar on Desktop, Bottom bar on Mobile) -->
+    <nav id="main-nav">
+        <div class="logo"><i class="fas fa-tasks"></i> <span>TaskSocial</span></div>
+        <div class="nav-links">
+            <a href="#" class="nav-link active" data-nav="dashboard"><i class="fas fa-home"></i> <span>Dashboard</span></a>
+            <a href="#" class="nav-link" data-nav="tasks"><i class="fas fa-list-check"></i> <span>All Tasks</span></a>
+            <a href="#" class="nav-link" data-nav="friends"><i class="fas fa-users"></i> <span>Friends</span></a>
+            <a href="#" class="nav-link" data-nav="feed"><i class="fas fa-rss"></i> <span>Feed</span></a>
+        </div>
+        <div class="user-profile" id="user-profile-container">
+            <!-- User profile rendered by JS -->
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main id="main-content">
+        <!-- Dashboard Section -->
+        <div id="dashboard" class="section">
+            <div class="content-header"><h1>Home</h1></div>
+            <div id="dashboard-feed">
+                <!-- Unified feed for tasks and activities rendered here -->
+            </div>
+        </div>
+
+        <!-- All Tasks Section -->
+        <div id="tasks" class="section hidden">
+            <div class="content-header"><h1>All Tasks</h1></div>
+            <div id="all-tasks-feed">
+                <!-- All user tasks rendered here -->
+            </div>
+        </div>
+        
+        <!-- Friends Section -->
+        <div id="friends" class="section hidden">
+             <div class="content-header"><h1>Friends</h1></div>
+             <div class="p-4 text-center">
+                <p class="text-gray-500">Friend system and leaderboards are coming soon!</p>
+             </div>
+        </div>
+
+        <!-- Activity Feed Section -->
+        <div id="feed" class="section hidden">
+            <div class="content-header"><h1>Activity Feed</h1></div>
+            <div id="full-activity-feed">
+                 <!-- Full activity feed rendered here -->
+            </div>
+        </div>
+
+    </main>
+    
+    <!-- Floating Action Button -->
+    <button id="fab-create-task" class="btn btn-primary" title="Create New Task" data-nav="create-task">
+        <i class="fas fa-plus"></i>
+    </button>
+</div>
+
+<!-- Create Task Modal/Page -->
+<div id="create-task" class="section hidden" style="max-width: 600px; margin: 2rem auto;">
+    <div class="card" >
+        <form id="taskForm">
+            <h1>Create New Task</h1>
+            <div class="form-group">
+                <label class="form-label">Task Title</label>
+                <input type="text" name="title" class="form-input" placeholder="e.g., Run 5k in the morning" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea name="description" class="form-input form-textarea" placeholder="Add more details... (optional)"></textarea>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label class="form-label">Priority</label>
+                    <select name="priority" class="form-input">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Points</label>
+                    <input type="number" name="points_value" class="form-input" value="10" min="1" max="100">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Deadline (Optional)</label>
+                <input type="datetime-local" name="deadline" class="form-input">
+            </div>
+            <div id="task-form-error" class="text-center mb-4 text-red-500 hidden"></div>
+            <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                <button type="submit" class="btn btn-primary" style="flex: 1;">Create Task</button>
+                <button type="button" class="btn btn-outline" data-nav="dashboard">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
+<!-- Login Section -->
+<div id="login" class="section">
+    <div class="login-card">
+        <h1 class="logo"><i class="fas fa-tasks"></i> TaskSocial</h1>
+        <p class="text-secondary-color mb-8">Your social task management companion.</p>
+        <form id="loginForm">
+            <div class="form-group" style="text-align: left;">
+                <label class="form-label">Phone Number</label>
+                <input type="tel" name="phone_number" class="form-input" placeholder="+1234567890" value="+1234567890" required>
+            </div>
+            <div class="form-group" style="text-align: left;">
+                <label class="form-label">Password</label>
+                <input type="password" name="password" class="form-input" placeholder="defaultpass" value="defaultpass">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 0.75rem;">Sign In</button>
+        </form>
+        <div id="login-error" class="text-center mt-4 text-red-500 hidden"></div>
+        <p style="font-size: 0.8rem; margin-top: 1rem;">Use a sample user with password "defaultpass".</p>
+    </div>
+</div>
+
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; z-index: 999;">
+    <div style="font-size: 2rem; animation: spin 1s linear infinite;">⏳</div>
+</div>
+<style> @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } </style>
+{% endblock %}  

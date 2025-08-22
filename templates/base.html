@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Social Task Management{% endblock %}</title>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="{% load static %}{% static 'css/style.css' %}" rel="stylesheet">
+    
+    <!-- Meta tags -->
+    <meta name="description" content="A beautiful social task management application">
+    <meta name="theme-color" content="#6366f1">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Header - Hidden by default, shown after login -->
+    <header class="header" id="mainHeader" style="display: none;">
+        <div class="container">
+            <div class="header-content">
+                <a href="#" class="logo" data-nav="dashboard">
+                    <div class="logo-icon">
+                        <i class="fas fa-tasks"></i>
+                    </div>
+                    <span>TaskSocial</span>
+                </a>
+                
+                <nav class="nav">
+                    <a href="#" class="nav-link active" data-nav="dashboard">
+                        <i class="fas fa-home"></i> Dashboard
+                    </a>
+                    <a href="#" class="nav-link" data-nav="tasks">
+                        <i class="fas fa-list-check"></i> Tasks
+                    </a>
+                    <a href="#" class="nav-link" data-nav="friends">
+                        <i class="fas fa-users"></i> Friends
+                    </a>
+                    <a href="#" class="nav-link" data-nav="feed">
+                        <i class="fas fa-rss"></i> Activity
+                    </a>
+                </nav>
+                
+                <div id="userInfo" class="flex items-center gap-4">
+                    <!-- User info will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- JavaScript -->
+    <script src="{% load static %}{% static 'js/app.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
