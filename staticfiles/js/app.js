@@ -1,465 +1,336 @@
-// Social Task Management App - Frontend JavaScript
-
-class TaskApp {
-    constructor() {
-        this.apiBase = '/api';
-        this.currentUser = null;
-        this.authToken = localStorage.getItem('authToken');
-        this.init();
-    }
-
-    async init() {
-        this.setupEventListeners();
-        await this.loadInitialData();
-        this.updateUI();
-    }
-
-    setupEventListeners() {
-        // Navigation
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('[data-nav]')) {
-                e.preventDefault();
-                this.navigateTo(e.target.dataset.nav);
-            }
-        });
-
-        // Task actions
-        document.addEventListener('click', (e) => {
-            if (e.target.matches('[data-task-complete]')) {
-                this.completeTask(e.target.dataset.taskComplete);
-            }
-            if (e.target.matches('[data-task-delete]')) {
-                this.deleteTask(e.target.dataset.taskDelete);
-            }
-        });
-
-        // Form submissions
-        document.addEventListener('submit', (e) => {
-            if (e.target.matches('#taskForm')) {
-                e.preventDefault();
-                this.createTask(new FormData(e.target));
-            }
-            if (e.target.matches('#loginForm')) {
-                e.preventDefault();
-                this.login(new FormData(e.target));
-            }
-        });
-
-        // Real-time updates
-        this.setupWebSocket();
-    }
-
-    async loadInitialData() {
-        try {
-            // Load user data
-            if (this.authToken) {
-                await this.loadUserProfile();
-                await this.loadDashboardData();
-            }
-        } catch (error) {
-            console.error('Error loading initial data:', error);
-            this.showNotification('Error loading data', 'error');
-        }
-    }
-
-    async loadUserProfile() {
-        try {
-            const response = await this.apiCall('/auth/profile/');
-            this.currentUser = response;
-        } catch (error) {
-            console.error('Error loading user profile:', error);
-            this.logout();
-        }
-    }
-
-    async loadDashboardData() {
-        try {
-            const [tasks, activities, stats] = await Promise.all([
-                this.apiCall('/tasks/'),
-                this.apiCall('/feed/'),
-                this.apiCall('/tasks/statistics/')
-            ]);
-
-            this.renderTasks(tasks.results || tasks);
-            this.renderActivityFeed(activities.results || activities);
-            this.renderStats(stats);
-        } catch (error) {
-            console.error('Error loading dashboard data:', error);
-        }
-    }
-
-    async apiCall(endpoint, options = {}) {
-        const url = `${this.apiBase}${endpoint}`;
-        const config = {
-            headers: {
-                'Content-Type': 'application/json',
-                ...(this.authToken && { 'Authorization': `Bearer ${this.authToken}` })
-            },
-            ...options
-        };
-
-        const response = await fetch(url, config);
-        
-        if (!response.ok) {
-            if (response.status === 401) {
-                this.logout();
-                throw new Error('Authentication required');
-            }
-            throw new Error(`API call failed: ${response.statusText}`);
-        }
-
-        return await response.json();
-    }
-
-    navigateTo(section) {
-        // Hide all sections
-        document.querySelectorAll('.section').forEach(el => {
-            el.classList.add('hidden');
-        });
-
-        // Show target section
-        const targetSection = document.getElementById(section);
-        if (targetSection) {
-            targetSection.classList.remove('hidden');
-            targetSection.classList.add('fade-in');
-        }
-
-        // Update navigation
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.classList.remove('active');
-        });
-        document.querySelector(`[data-nav="${section}"]`)?.classList.add('active');
-    }
-
-    renderStats(stats) {
-        const statsContainer = document.getElementById('statsContainer');
-        if (!statsContainer) return;
-
-        statsContainer.innerHTML = `
-            <div class="stat-card">
-                <div class="stat-icon tasks">📋</div>
-                <div class="stat-number">${stats.total_tasks || 0}</div>
-                <div class="stat-label">Total Tasks</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon friends">👥</div>
-                <div class="stat-number">${stats.completed_tasks || 0}</div>
-                <div class="stat-label">Completed</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon points">⭐</div>
-                <div class="stat-number">${stats.total_points_earned || 0}</div>
-                <div class="stat-label">Points Earned</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon achievements">🏆</div>
-                <div class="stat-number">${stats.pending_tasks || 0}</div>
-                <div class="stat-label">Pending</div>
-            </div>
-        `;
-    }
-
-    renderTasks(tasks) {
-        const tasksContainer = document.getElementById('tasksContainer');
-        if (!tasksContainer) return;
-
-        if (!tasks || tasks.length === 0) {
-            tasksContainer.innerHTML = `
-                <div class="text-center">
-                    <div style="font-size: 3rem; margin-bottom: 1rem;">📝</div>
-                    <h3>No tasks yet</h3>
-                    <p>Create your first task to get started!</p>
-                    <button class="btn btn-primary" data-nav="create-task">Create Task</button>
-                </div>
-            `;
-            return;
-        }
-
-        const tasksList = tasks.map(task => `
-            <div class="task-item">
-                <div class="task-checkbox ${task.status === 'completed' ? 'completed' : ''}" 
-                     data-task-complete="${task.id}"></div>
-                <div class="task-content">
-                    <div class="task-title ${task.status === 'completed' ? 'completed' : ''}">${task.title}</div>
-                    <div class="task-meta">
-                        <span class="priority-badge priority-${task.priority}">${task.priority}</span>
-                        <span>⭐ ${task.points_value} points</span>
-                        ${task.deadline ? `<span>📅 ${new Date(task.deadline).toLocaleDateString()}</span>` : ''}
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-outline" data-task-delete="${task.id}">Delete</button>
-            </div>
-        `).join('');
-
-        tasksContainer.innerHTML = `<div class="task-list">${tasksList}</div>`;
-    }
-
-    renderActivityFeed(activities) {
-        const feedContainer = document.getElementById('activityFeed');
-        if (!feedContainer) return;
-
-        if (!activities || activities.length === 0) {
-            feedContainer.innerHTML = `
-                <div class="text-center">
-                    <div style="font-size: 2rem; margin-bottom: 1rem;">📱</div>
-                    <p>No recent activities</p>
-                </div>
-            `;
-            return;
-        }
-
-        const activitiesList = activities.map(activity => `
-            <div class="activity-item">
-                <div class="activity-avatar">${this.getActivityIcon(activity.activity_type)}</div>
-                <div class="activity-content">
-                    <div class="activity-text">${activity.title}</div>
-                    <div class="activity-time">${this.formatTimeAgo(activity.created_at)}</div>
-                </div>
-            </div>
-        `).join('');
-
-        feedContainer.innerHTML = activitiesList;
-    }
-
-    getActivityIcon(activityType) {
-        const icons = {
-            'task_completed': '✅',
-            'achievement_earned': '🏆',
-            'friend_joined': '👋',
-            'milestone_reached': '🎯',
-            'shared_task_completed': '🤝'
-        };
-        return icons[activityType] || '📱';
-    }
-
-    formatTimeAgo(dateString) {
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffInSeconds = Math.floor((now - date) / 1000);
-
-        if (diffInSeconds < 60) return 'Just now';
-        if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-        if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-        return `${Math.floor(diffInSeconds / 86400)}d ago`;
-    }
-
-    async completeTask(taskId) {
-        try {
-            await this.apiCall(`/tasks/${taskId}/complete_task/`, {
-                method: 'POST'
-            });
-            
-            this.showNotification('Task completed! 🎉', 'success');
-            await this.loadDashboardData();
-        } catch (error) {
-            console.error('Error completing task:', error);
-            this.showNotification('Error completing task', 'error');
-        }
-    }
-
-    async deleteTask(taskId) {
-        if (!confirm('Are you sure you want to delete this task?')) return;
-
-        try {
-            await this.apiCall(`/tasks/${taskId}/`, {
-                method: 'DELETE'
-            });
-            
-            this.showNotification('Task deleted', 'success');
-            await this.loadDashboardData();
-        } catch (error) {
-            console.error('Error deleting task:', error);
-            this.showNotification('Error deleting task', 'error');
-        }
-    }
-
-    async createTask(formData) {
-        try {
-            const taskData = {
-                title: formData.get('title'),
-                description: formData.get('description'),
-                priority: formData.get('priority'),
-                deadline: formData.get('deadline') || null,
-                points_value: parseInt(formData.get('points_value')) || 10
-            };
-
-            await this.apiCall('/tasks/', {
-                method: 'POST',
-                body: JSON.stringify(taskData)
-            });
-
-            this.showNotification('Task created successfully! 🎯', 'success');
-            document.getElementById('taskForm').reset();
-            this.navigateTo('dashboard');
-            await this.loadDashboardData();
-        } catch (error) {
-            console.error('Error creating task:', error);
-            this.showNotification('Error creating task', 'error');
-        }
-    }
-
-    async login(formData) {
-        try {
-            const loginData = {
-                phone_number: formData.get('phone_number'),
-                password: formData.get('password') || '123456' // Demo password
-            };
-
-            // For demo purposes, we'll simulate login
-            this.authToken = 'demo-token';
-            localStorage.setItem('authToken', this.authToken);
-            
-            this.currentUser = {
-                phone_number: loginData.phone_number,
-                username: `user_${loginData.phone_number.replace(/\D/g, '')}`
-            };
-
-            this.showNotification('Welcome back! 👋', 'success');
-            this.navigateTo('dashboard');
-            await this.loadDashboardData();
-        } catch (error) {
-            console.error('Error logging in:', error);
-            this.showNotification('Error logging in', 'error');
-        }
-    }
-
-    logout() {
-        this.authToken = null;
-        this.currentUser = null;
-        localStorage.removeItem('authToken');
-        this.navigateTo('login');
-        this.showNotification('Logged out successfully', 'success');
-    }
-
-    showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.innerHTML = `
-            <div class="notification-content">
-                <span>${message}</span>
-                <button class="notification-close">&times;</button>
-            </div>
-        `;
-
-        document.body.appendChild(notification);
-
-        // Auto remove after 5 seconds
-        setTimeout(() => {
-            notification.remove();
-        }, 5000);
-
-        // Manual close
-        notification.querySelector('.notification-close').addEventListener('click', () => {
-            notification.remove();
-        });
-    }
-
-    setupWebSocket() {
-        // WebSocket setup for real-time updates
-        if (this.authToken && window.WebSocket) {
-            try {
-                const wsUrl = `ws://${window.location.host}/ws/notifications/`;
-                this.ws = new WebSocket(wsUrl);
-                
-                this.ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    this.handleWebSocketMessage(data);
-                };
-                
-                this.ws.onclose = () => {
-                    // Reconnect after 5 seconds
-                    setTimeout(() => this.setupWebSocket(), 5000);
-                };
-            } catch (error) {
-                console.log('WebSocket not available');
-            }
-        }
-    }
-
-    handleWebSocketMessage(data) {
-        if (data.type === 'notification') {
-            this.showNotification(data.message, 'info');
-        } else if (data.type === 'task_update') {
-            this.loadDashboardData();
-        }
-    }
-
-    updateUI() {
-        // Update user info in header
-        const userInfo = document.getElementById('userInfo');
-        if (userInfo && this.currentUser) {
-            userInfo.innerHTML = `
-                <span>Welcome, ${this.currentUser.username}!</span>
-                <button class="btn btn-sm btn-outline" onclick="app.logout()">Logout</button>
-            `;
-        }
-
-        // Show/hide sections based on auth state
-        if (this.authToken) {
-            this.navigateTo('dashboard');
-        } else {
-            this.navigateTo('login');
-        }
-    }
-}
-
-// Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.app = new TaskApp();
+    const app = {
+        // --- STATE ---
+        API_BASE_URL: '/api',
+        token: localStorage.getItem('authToken'),
+        currentUser: null,
+
+        // --- DOM ELEMENTS ---
+        elements: {
+            loginSection: document.getElementById('login'),
+            appContainer: document.getElementById('app-container'),
+            mainNav: document.getElementById('main-nav'),
+            mainContent: document.getElementById('main-content'),
+            sections: document.querySelectorAll('.section'),
+            navLinks: document.querySelectorAll('.nav-link'),
+            loginForm: document.getElementById('loginForm'),
+            loginError: document.getElementById('login-error'),
+            taskForm: document.getElementById('taskForm'),
+            taskFormError: document.getElementById('task-form-error'),
+            userProfileContainer: document.getElementById('user-profile-container'),
+            dashboardFeed: document.getElementById('dashboard-feed'),
+            allTasksFeed: document.getElementById('all-tasks-feed'),
+            fullActivityFeed: document.getElementById('full-activity-feed'),
+            loadingOverlay: document.getElementById('loadingOverlay'),
+            createTaskSection: document.getElementById('create-task'),
+            fab: document.getElementById('fab-create-task'),
+        },
+
+        // --- INITIALIZATION ---
+        init() {
+            this.elements.loginForm.addEventListener('submit', e => {
+                e.preventDefault();
+                this.login();
+            });
+
+            this.elements.taskForm.addEventListener('submit', e => {
+                e.preventDefault();
+                this.createTask();
+            });
+
+            document.body.addEventListener('click', e => {
+                const navTarget = e.target.closest('[data-nav]');
+                if (navTarget) {
+                    e.preventDefault();
+                    this.navigate(navTarget.dataset.nav);
+                }
+
+                const taskCheckbox = e.target.closest('.task-checkbox');
+                if (taskCheckbox && !taskCheckbox.classList.contains('completed')) {
+                    const taskId = taskCheckbox.closest('.task-item').dataset.taskId;
+                    this.completeTask(taskId);
+                }
+            });
+
+            this.checkLoginState();
+        },
+
+        // --- API & AUTHENTICATION ---
+        async fetchAPI(endpoint, options = {}) {
+            this.showLoading(true);
+            const headers = { 'Content-Type': 'application/json', ...options.headers };
+            if (this.token) {
+                headers['Authorization'] = `Bearer ${this.token}`;
+            }
+
+            try {
+                const response = await fetch(`${this.API_BASE_URL}${endpoint}`, { ...options, headers });
+                if (response.status === 204) return true;
+                const data = await response.json();
+
+                if (!response.ok) {
+                    console.error('API Error:', data);
+                    if (response.status === 401 && this.token) this.logout();
+                    throw new Error(data.detail || data.error || JSON.stringify(data));
+                }
+                return data;
+            } catch (error) {
+                console.error('Fetch Error:', error);
+                throw error;
+            } finally {
+                this.showLoading(false);
+            }
+        },
+
+        async login() {
+            const formData = new FormData(this.elements.loginForm);
+            const data = Object.fromEntries(formData.entries());
+            this.elements.loginError.classList.add('hidden');
+
+            try {
+                const response = await this.fetchAPI('/auth/jwt/login/', {
+                    method: 'POST',
+                    body: JSON.stringify(data),
+                });
+                this.token = response.access;
+                this.currentUser = response.user;
+                localStorage.setItem('authToken', this.token);
+                localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+                this.showMainApp();
+            } catch (error) {
+                this.elements.loginError.textContent = "Login failed. Please check credentials.";
+                this.elements.loginError.classList.remove('hidden');
+            }
+        },
+
+        logout() {
+            this.token = null;
+            this.currentUser = null;
+            localStorage.clear();
+            this.showLoginPage();
+        },
+
+        checkLoginState() {
+            const userJson = localStorage.getItem('currentUser');
+            if (this.token && userJson) {
+                try {
+                    this.currentUser = JSON.parse(userJson);
+                    this.showMainApp();
+                } catch(e) {
+                    this.logout();
+                }
+            } else {
+                this.showLoginPage();
+            }
+        },
+
+        // --- UI RENDERING & STATE MANAGEMENT ---
+        showLoading(isLoading) {
+            this.elements.loadingOverlay.classList.toggle('hidden', !isLoading);
+        },
+
+        showLoginPage() {
+            this.elements.appContainer.classList.add('hidden');
+            this.elements.createTaskSection.classList.add('hidden');
+            this.elements.loginSection.classList.remove('hidden');
+        },
+
+        async showMainApp() {
+            this.elements.loginSection.classList.add('hidden');
+            this.elements.appContainer.classList.remove('hidden');
+            this.renderUserProfile();
+            this.navigate('dashboard');
+        },
+
+        renderUserProfile() {
+            if (!this.currentUser) return;
+            const profile = this.currentUser.profile;
+            const displayName = profile.display_name || this.currentUser.username;
+            this.elements.userProfileContainer.innerHTML = `
+                <div class="user-avatar">${displayName.charAt(0).toUpperCase()}</div>
+                <div class="user-info">
+                    <div class="name">${displayName}</div>
+                    <div class="points">${profile.total_points} points</div>
+                </div>
+                <button id="logoutButton" class="btn" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+            `;
+            document.getElementById('logoutButton').addEventListener('click', () => this.logout());
+        },
+
+        async renderDashboard() {
+            try {
+                const [tasksResponse, activitiesResponse] = await Promise.all([
+                    this.fetchAPI('/tasks/?ordering=-created_at'),
+                    this.fetchAPI('/feed/activities/?ordering=-created_at')
+                ]);
+
+                const tasks = tasksResponse.results.map(item => ({ ...item, type: 'task', date: item.created_at }));
+                const activities = activitiesResponse.results.map(item => ({ ...item, type: 'activity', date: item.created_at }));
+
+                const combinedFeed = [...tasks, ...activities].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+                if (combinedFeed.length === 0) {
+                    this.elements.dashboardFeed.innerHTML = '<p class="text-center p-8 text-gray-500">Your feed is empty. Create a task to get started!</p>';
+                    return;
+                }
+                
+                this.elements.dashboardFeed.innerHTML = combinedFeed.map(item => {
+                    return item.type === 'task' ? this.getTaskHtml(item) : this.getActivityHtml(item);
+                }).join('');
+            } catch (error) {
+                this.elements.dashboardFeed.innerHTML = `<p class="text-center p-8 text-red-500">Could not load dashboard feed.</p>`;
+            }
+        },
+
+        renderTasks(tasks, container) {
+            if (!tasks || tasks.length === 0) {
+                container.innerHTML = '<p class="text-center p-8 text-gray-500">No tasks found. Great job, or time to create one!</p>';
+                return;
+            }
+            container.innerHTML = tasks.map(task => this.getTaskHtml(task)).join('');
+        },
+
+        renderActivityFeed(activities, container) {
+            if (!activities || activities.length === 0) {
+                container.innerHTML = '<p class="text-center p-8 text-gray-500">No recent activity.</p>';
+                return;
+            }
+            container.innerHTML = activities.map(activity => this.getActivityHtml(activity)).join('');
+        },
+
+        getTaskHtml(task) {
+            const isCompleted = task.status === 'completed';
+            return `
+                <div class="card task-item" data-task-id="${task.id}">
+                    <div class="item-actions">
+                         <div class="task-checkbox ${isCompleted ? 'completed' : ''}" title="Mark as complete">
+                            ${isCompleted ? '<i class="fas fa-check"></i>' : ''}
+                         </div>
+                    </div>
+                    <div class="item-content">
+                        <div class="item-title ${isCompleted ? 'completed' : ''}">${task.title}</div>
+                        <p>${task.description || ''}</p>
+                        <div class="item-meta">
+                            <span class="priority priority-${task.priority}">● ${task.priority}</span>
+                            <span>⭐ ${task.points_value} pts</span>
+                            ${task.deadline ? `<span>🕒 ${this.formatTimeAgo(task.deadline)}</span>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+        },
+
+        getActivityHtml(activity) {
+            const icons = { task_completed: 'fa-check', achievement_earned: 'fa-trophy', friend_joined: 'fa-user-plus' };
+            const icon = icons[activity.activity_type] || 'fa-rss';
+            return `
+                <div class="card activity-item">
+                    <div class="item-icon"><i class="fas ${icon}"></i></div>
+                    <div class="item-content">
+                        <div class="item-title">${activity.user.profile.display_name || activity.user.username}</div>
+                        <p>${activity.title}</p>
+                        <div class="item-meta">
+                            <span>${this.formatTimeAgo(activity.created_at)}</span>
+                        </div>
+                    </div>
+                </div>`;
+        },
+
+        // --- TASK ACTIONS ---
+        async createTask() {
+            const formData = new FormData(this.elements.taskForm);
+            let data = Object.fromEntries(formData.entries());
+            data.points_value = parseInt(data.points_value);
+            this.elements.taskFormError.classList.add('hidden');
+
+            if (data.deadline) data.deadline = new Date(data.deadline).toISOString();
+            else delete data.deadline;
+            
+            try {
+                await this.fetchAPI('/tasks/', { method: 'POST', body: JSON.stringify(data) });
+                this.elements.taskForm.reset();
+                this.navigate('dashboard');
+            } catch (error) {
+                this.elements.taskFormError.textContent = `Error creating task: ${error.message}`;
+                this.elements.taskFormError.classList.remove('hidden');
+            }
+        },
+
+        async completeTask(taskId) {
+            try {
+                const response = await this.fetchAPI(`/tasks/${taskId}/complete_task/`, { method: 'POST' });
+                // Re-render the dashboard to show updated state and new activity
+                this.renderDashboard(); 
+                this.currentUser.profile.total_points += response.points_earned;
+                this.renderUserProfile();
+            } catch (error) {
+                console.error(`Failed to complete task ${taskId}:`, error);
+                alert(`Error: Could not complete task. ${error.message}`);
+            }
+        },
+
+        // --- NAVIGATION & PAGE VIEWS ---
+        navigate(sectionId) {
+            // Hide all main content sections
+            this.elements.appContainer.querySelectorAll('#main-content .section').forEach(s => s.classList.add('hidden'));
+            // Hide create task section
+            this.elements.createTaskSection.classList.add('hidden');
+
+            // Show the target section
+            const targetSection = document.getElementById(sectionId);
+            if (targetSection) {
+                 targetSection.classList.remove('hidden');
+            } else {
+                 document.getElementById('dashboard').classList.remove('hidden');
+            }
+            
+            this.elements.fab.classList.toggle('hidden', sectionId === 'create-task');
+            
+            // Update nav link styles
+            this.elements.navLinks.forEach(link => {
+                link.classList.toggle('active', link.dataset.nav === sectionId);
+            });
+            
+            switch (sectionId) {
+                case 'dashboard': this.renderDashboard(); break;
+                case 'tasks': this.renderAllTasks(); break;
+                case 'feed': this.renderFullFeed(); break;
+            }
+        },
+        
+        async renderAllTasks() {
+            try {
+                const response = await this.fetchAPI('/tasks/?ordering=-created_at');
+                this.renderTasks(response.results, this.elements.allTasksFeed);
+            } catch(error) {
+                this.elements.allTasksFeed.innerHTML = `<p class="text-center p-8 text-red-500">Could not load tasks.</p>`;
+            }
+        },
+        
+        async renderFullFeed() {
+             try {
+                const response = await this.fetchAPI('/feed/activities/?ordering=-created_at');
+                this.renderActivityFeed(response.results, this.elements.fullActivityFeed);
+            } catch(error) {
+                this.elements.fullActivityFeed.innerHTML = `<p class="text-center p-8 text-red-500">Could not load activity feed.</p>`;
+            }
+        },
+        
+        // --- UTILITIES ---
+        formatTimeAgo(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            const now = new Date();
+            const seconds = Math.floor((now - date) / 1000);
+            if (seconds < 60) return "just now";
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            return `${days}d ago`;
+        }
+    };
+
+    app.init();
+    window.app = app; // For debugging
 });
-
-// Add notification styles
-const notificationStyles = `
-    .notification {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 1000;
-        max-width: 400px;
-        padding: 1rem;
-        border-radius: 0.75rem;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        animation: slideInRight 0.3s ease;
-    }
-    
-    .notification-info {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-    
-    .notification-success {
-        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-        color: white;
-    }
-    
-    .notification-error {
-        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-        color: white;
-    }
-    
-    .notification-content {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    .notification-close {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 1.5rem;
-        cursor: pointer;
-        padding: 0;
-        margin-left: 1rem;
-    }
-    
-    @keyframes slideInRight {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-`;
-
-// Add styles to head
-const styleSheet = document.createElement('style');
-styleSheet.textContent = notificationStyles;
-document.head.appendChild(styleSheet);
